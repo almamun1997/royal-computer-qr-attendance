@@ -4,11 +4,398 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Royal Computer - QR Attendance</title>
+
+  <title>Royal Computer - QR Attendance Scanner</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      color: #1e293b;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 20px auto;
+      background: white;
+      padding: 22px;
+      border-radius: 16px;
+      box-shadow: 0 5px 25px rgba(0,0,0,0.08);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .header h2 {
+      margin: 0 0 8px;
+      color: #174ea6;
+    }
+
+    .header p {
+      margin: 0;
+      color: #64748b;
+      font-size: 14px;
+    }
+
+    #reader {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+
+    #status {
+      margin: 16px 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .student-card {
+      display: none;
+      margin-top: 20px;
+      padding: 18px;
+      border: 1px solid #dbeafe;
+      border-radius: 12px;
+      background: #f8fbff;
+    }
+
+    .student-card h3 {
+      text-align: center;
+      color: #174ea6;
+      margin-top: 0;
+    }
+
+    .info {
+      padding: 10px 0;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 15px;
+    }
+
+    .info:last-child {
+      border-bottom: none;
+    }
+
+    .info strong {
+      display: inline-block;
+      width: 110px;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #174ea6;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    #restartBtn {
+      display: none;
+      background: #15803d;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+  </style>
 </head>
+
 <body>
-  <h1>Royal Computer Training Center</h1>
-  <h2>QR Attendance Scanner</h2>
-  <p>Our QR Attendance System is Ready!</p>
+
+  <div class="container">
+
+    <div class="header">
+      <h2>Royal Computer</h2>
+      <p>Training Center - QR Attendance Scanner</p>
+    </div>
+
+    <div id="reader"></div>
+
+    <div id="status">
+      ক্যামেরা চালু করে শিক্ষার্থীর QR Code Scan করুন।
+    </div>
+
+    <div id="studentCard" class="student-card">
+
+      <h3>Student Information</h3>
+
+      <div class="info">
+        <strong>Form No:</strong>
+        <span id="formNo"></span>
+      </div>
+
+      <div class="info">
+        <strong>Name:</strong>
+        <span id="studentName"></span>
+      </div>
+
+      <div class="info">
+        <strong>Course:</strong>
+        <span id="course"></span>
+      </div>
+
+    </div>
+
+    <button id="restartBtn" onclick="restartScanner()">
+      Scan Another Student
+    </button>
+
+    <div class="footer">
+      Royal Computer Training Center<br>
+      QR Attendance Management System
+    </div>
+
+  </div>
+
+
+  <script>
+
+    // Google Apps Script Backend URL
+    const API_URL =
+      "https://script.google.com/macros/s/AKfycbyc7ivJIu27JPmVc0xYRIdBdvkRfQW_pOBA2tsTNLy4NCFtF266WnI9rBZADbNTEMnPQQ/exec";
+
+
+    let scanner = null;
+    let scannerRunning = false;
+    let processing = false;
+
+
+    const statusBox = document.getElementById("status");
+    const studentCard = document.getElementById("studentCard");
+    const restartBtn = document.getElementById("restartBtn");
+
+
+    function setStatus(message) {
+      statusBox.textContent = message;
+    }
+
+
+    // Scanner চালু
+    async function startScanner() {
+
+      try {
+
+        if (scannerRunning) return;
+
+        if (!window.Html5Qrcode) {
+          setStatus("QR Scanner Library Load হয়নি।");
+          return;
+        }
+
+        scanner = new Html5Qrcode("reader");
+
+        setStatus("ক্যামেরা চালু হচ্ছে...");
+
+        await scanner.start(
+          { facingMode: "environment" },
+
+          {
+            fps: 10,
+            qrbox: {
+              width: 230,
+              height: 230
+            }
+          },
+
+          onScanSuccess,
+
+          function () {
+            // Scan frame-এর সাময়িক error উপেক্ষা করা হচ্ছে
+          }
+        );
+
+        scannerRunning = true;
+        setStatus("QR Code Scan করার জন্য প্রস্তুত।");
+
+      } catch (error) {
+
+        setStatus(
+          "Camera Error: " + error.message
+        );
+
+      }
+    }
+
+
+    // QR Scan হলে
+    async function onScanSuccess(decodedText) {
+
+      if (processing) return;
+
+      processing = true;
+
+      setStatus("QR Code পাওয়া গেছে। শিক্ষার্থীর তথ্য যাচাই হচ্ছে...");
+
+      await stopScanner();
+
+      lookupStudent(decodedText);
+    }
+
+
+    // Backend API থেকে শিক্ষার্থীর তথ্য আনা
+    function lookupStudent(token) {
+
+      const callbackName = "handleStudentLookup";
+
+      const oldScript = document.getElementById("apiScript");
+
+      if (oldScript) {
+        oldScript.remove();
+      }
+
+      window[callbackName] = function (result) {
+
+        delete window[callbackName];
+
+        const script = document.getElementById("apiScript");
+
+        if (script) script.remove();
+
+        if (result && result.success) {
+
+          document.getElementById("formNo").textContent =
+            result.formNo;
+
+          document.getElementById("studentName").textContent =
+            result.name;
+
+          document.getElementById("course").textContent =
+            result.course;
+
+          studentCard.style.display = "block";
+
+          setStatus("সফল! শিক্ষার্থীর তথ্য পাওয়া গেছে।");
+
+          restartBtn.style.display = "block";
+
+        } else {
+
+          studentCard.style.display = "none";
+
+          setStatus(
+            result && result.message
+              ? result.message
+              : "শিক্ষার্থীর তথ্য পাওয়া যায়নি।"
+          );
+
+          restartBtn.style.display = "block";
+        }
+
+      };
+
+
+      const script = document.createElement("script");
+
+      script.id = "apiScript";
+
+      script.onerror = function () {
+
+        delete window[callbackName];
+
+        script.remove();
+
+        setStatus(
+          "Backend API-এর সঙ্গে সংযোগ করা যায়নি।"
+        );
+
+        restartBtn.style.display = "block";
+
+      };
+
+
+      script.src =
+        API_URL +
+        "?action=lookup" +
+        "&token=" + encodeURIComponent(token) +
+        "&callback=" + callbackName +
+        "&_=" + Date.now();
+
+      document.body.appendChild(script);
+
+
+      // API Response না এলে
+      setTimeout(function () {
+
+        if (window[callbackName]) {
+
+          delete window[callbackName];
+
+          script.remove();
+
+          setStatus(
+            "API Response পাওয়া যায়নি। আবার চেষ্টা করুন।"
+          );
+
+          restartBtn.style.display = "block";
+        }
+
+      }, 15000);
+
+    }
+
+
+    // Scanner বন্ধ
+    async function stopScanner() {
+
+      if (scanner && scannerRunning) {
+
+        try {
+          await scanner.stop();
+        } catch (error) {
+          console.error(error);
+        }
+
+        scannerRunning = false;
+      }
+    }
+
+
+    // আবার Scan শুরু
+    async function restartScanner() {
+
+      studentCard.style.display = "none";
+
+      restartBtn.style.display = "none";
+
+      processing = false;
+
+      setStatus("নতুন QR Code Scan করার জন্য প্রস্তুত।");
+
+      await startScanner();
+    }
+
+
+    // Website Load হলে
+    window.addEventListener("load", function () {
+      startScanner();
+    });
+
+  </script>
+
 </body>
 </html>
