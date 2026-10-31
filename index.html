@@ -313,15 +313,12 @@
 
       script.id = "apiScript";
 
-      script.onerror = function () {
+     script.onerror = function (error) {
+  console.error("API SCRIPT ERROR:", error);
+  console.error("Requested API URL:", script.src);
 
-        delete window[callbackName];
-
-        script.remove();
-
-        setStatus(
-          "Backend API-এর সঙ্গে সংযোগ করা যায়নি।"
-        );
+  reject(new Error("Backend API Script Load Failed. Console দেখুন।"));
+};
 
         restartBtn.style.display = "block";
 
