@@ -1,108 +1,528 @@
 
-// Backend API থেকে শিক্ষার্থীর তথ্য আনা
-function lookupStudent(token) {
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  const callbackName =
-    "handleStudentLookup_" + Date.now();
+  <title>Royal Computer - QR Attendance Scanner</title>
 
-  const oldScript = document.getElementById("apiScript");
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
-  if (oldScript) {
-    oldScript.remove();
-  }
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
-  let responseReceived = false;
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      color: #1e293b;
+    }
 
-  window[callbackName] = function (result) {
+    .container {
+      max-width: 500px;
+      margin: 20px auto;
+      background: white;
+      padding: 22px;
+      border-radius: 16px;
+      box-shadow: 0 5px 25px rgba(0,0,0,0.08);
+    }
 
-    responseReceived = true;
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
 
-    delete window[callbackName];
+    .header h2 {
+      margin: 0 0 8px;
+      color: #174ea6;
+    }
 
-    const script = document.getElementById("apiScript");
-    if (script) script.remove();
+    .header p {
+      margin: 0;
+      color: #64748b;
+      font-size: 14px;
+    }
 
-    if (result && result.success) {
+    #reader {
+      width: 100%;
+      overflow: hidden;
+      border-radius: 12px;
+    }
 
-      document.getElementById("formNo").textContent =
-        result.formNo;
+    #status {
+      margin: 16px 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.5;
+    }
 
-      document.getElementById("studentName").textContent =
-        result.name;
+    .student-card {
+      display: none;
+      margin-top: 20px;
+      padding: 18px;
+      border: 1px solid #dbeafe;
+      border-radius: 12px;
+      background: #f8fbff;
+    }
 
-      document.getElementById("course").textContent =
-        result.course;
+    .student-card h3 {
+      text-align: center;
+      color: #174ea6;
+      margin-top: 0;
+    }
 
-      studentCard.style.display = "block";
+    .info {
+      padding: 10px 0;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
 
-      setStatus("সফল! শিক্ষার্থীর তথ্য পাওয়া গেছে।");
+    .info:last-child {
+      border-bottom: none;
+    }
 
-    } else {
+    .info strong {
+      display: inline-block;
+      width: 110px;
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      margin-top: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #174ea6;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    #switchCameraBtn {
+      background: #475569;
+    }
+
+    #restartBtn {
+      display: none;
+      background: #15803d;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+
+    <div class="header">
+      <h2>Royal Computer</h2>
+      <p>Training Center - QR Attendance Scanner</p>
+    </div>
+
+    <div id="reader"></div>
+
+    <button id="switchCameraBtn" onclick="switchCamera()" disabled>
+      Front / Back Camera পরিবর্তন
+    </button>
+
+    <div id="status">
+      ক্যামেরা চালু করে শিক্ষার্থীর QR Code Scan করুন।
+    </div>
+
+    <div id="studentCard" class="student-card">
+
+      <h3>Student Information</h3>
+
+      <div class="info">
+        <strong>Form No:</strong>
+        <span id="formNo"></span>
+      </div>
+
+      <div class="info">
+        <strong>Name:</strong>
+        <span id="studentName"></span>
+      </div>
+
+      <div class="info">
+        <strong>Course:</strong>
+        <span id="course"></span>
+      </div>
+
+    </div>
+
+    <button id="restartBtn" onclick="restartScanner()">
+      Scan Another Student
+    </button>
+
+    <div class="footer">
+      Royal Computer Training Center<br>
+      QR Attendance Management System
+    </div>
+
+  </div>
+
+
+  <script>
+
+    // Google Apps Script Backend URL
+    const API_URL =
+      "https://script.google.com/macros/s/AKfycbyc7ivJIu27JPmVc0xYRIdBdvkRfQW_pOBA2tsTNLy4NCFtF266WnI9rBZADbNTEMnPQQ/exec";
+
+
+    let scanner = null;
+    let scannerRunning = false;
+    let processing = false;
+
+    let cameras = [];
+    let currentCameraIndex = 0;
+
+    let lookupTimeout = null;
+
+
+    const statusBox = document.getElementById("status");
+    const studentCard = document.getElementById("studentCard");
+    const restartBtn = document.getElementById("restartBtn");
+    const switchCameraBtn = document.getElementById("switchCameraBtn");
+
+
+    function setStatus(message) {
+      statusBox.textContent = message;
+    }
+
+
+    // Camera List সংগ্রহ
+    async function loadCameras() {
+
+      cameras = await Html5Qrcode.getCameras();
+
+      if (!cameras || cameras.length === 0) {
+        throw new Error("কোনো Camera পাওয়া যায়নি।");
+      }
+
+      const backCameraIndex = cameras.findIndex(camera =>
+        /back|rear|environment/i.test(camera.label)
+      );
+
+      currentCameraIndex =
+        backCameraIndex >= 0 ? backCameraIndex : 0;
+
+      switchCameraBtn.disabled = cameras.length < 2;
+    }
+
+
+    // Scanner চালু
+    async function startScanner() {
+
+      try {
+
+        if (scannerRunning) return;
+
+        if (!window.Html5Qrcode) {
+          setStatus("QR Scanner Library Load হয়নি।");
+          return;
+        }
+
+        if (!cameras.length) {
+          setStatus("Camera অনুমতি চাওয়া হচ্ছে...");
+          await loadCameras();
+        }
+
+        if (!scanner) {
+          scanner = new Html5Qrcode("reader");
+        }
+
+        setStatus("ক্যামেরা চালু হচ্ছে...");
+
+        await scanner.start(
+
+          cameras[currentCameraIndex].id,
+
+          {
+            fps: 10,
+            qrbox: {
+              width: 230,
+              height: 230
+            }
+          },
+
+          onScanSuccess,
+
+          function () {
+            // সাময়িক Scan Error উপেক্ষা
+          }
+
+        );
+
+        scannerRunning = true;
+
+        switchCameraBtn.disabled = cameras.length < 2;
+
+        setStatus(
+          "QR Code Scan করার জন্য প্রস্তুত।"
+        );
+
+      } catch (error) {
+
+        console.error("Camera Error:", error);
+
+        scannerRunning = false;
+
+        setStatus(
+          "Camera Error: " + error.message
+        );
+
+        switchCameraBtn.disabled = true;
+
+      }
+
+    }
+
+
+    // QR Scan হলে
+    async function onScanSuccess(decodedText) {
+
+      if (processing) return;
+
+      processing = true;
+
+      setStatus(
+        "QR Code পাওয়া গেছে। শিক্ষার্থীর তথ্য যাচাই হচ্ছে..."
+      );
+
+      await stopScanner();
+
+      lookupStudent(decodedText);
+
+    }
+
+
+    // Backend API থেকে শিক্ষার্থীর তথ্য আনা
+    function lookupStudent(token) {
+
+      const callbackName =
+        "handleStudentLookup_" + Date.now();
+
+      const oldScript = document.getElementById("apiScript");
+
+      if (oldScript) {
+        oldScript.remove();
+      }
+
+      if (lookupTimeout) {
+        clearTimeout(lookupTimeout);
+      }
+
+      let responseReceived = false;
+
+      window[callbackName] = function (result) {
+
+        if (responseReceived) return;
+
+        responseReceived = true;
+
+        delete window[callbackName];
+
+        const script = document.getElementById("apiScript");
+
+        if (script) script.remove();
+
+        if (lookupTimeout) {
+          clearTimeout(lookupTimeout);
+          lookupTimeout = null;
+        }
+
+        if (result && result.success) {
+
+          document.getElementById("formNo").textContent =
+            result.formNo;
+
+          document.getElementById("studentName").textContent =
+            result.name;
+
+          document.getElementById("course").textContent =
+            result.course;
+
+          studentCard.style.display = "block";
+
+          setStatus(
+            "সফল! শিক্ষার্থীর তথ্য পাওয়া গেছে।"
+          );
+
+        } else {
+
+          studentCard.style.display = "none";
+
+          setStatus(
+            result && result.message
+              ? result.message
+              : "শিক্ষার্থীর তথ্য পাওয়া যায়নি।"
+          );
+
+        }
+
+        restartBtn.style.display = "block";
+
+      };
+
+
+      const script = document.createElement("script");
+
+      script.id = "apiScript";
+
+      script.onerror = function (error) {
+
+        console.error("API SCRIPT ERROR:", error);
+        console.error("Requested API URL:", script.src);
+
+        if (responseReceived) return;
+
+        responseReceived = true;
+
+        delete window[callbackName];
+
+        script.remove();
+
+        if (lookupTimeout) {
+          clearTimeout(lookupTimeout);
+          lookupTimeout = null;
+        }
+
+        setStatus(
+          "Backend API Script Load Failed. Console দেখুন।"
+        );
+
+        restartBtn.style.display = "block";
+
+      };
+
+
+      script.src =
+        API_URL +
+        "?action=lookup" +
+        "&token=" + encodeURIComponent(token) +
+        "&callback=" + callbackName +
+        "&_=" + Date.now();
+
+      document.body.appendChild(script);
+
+
+      // API Response না এলে
+      lookupTimeout = setTimeout(function () {
+
+        if (!responseReceived) {
+
+          responseReceived = true;
+
+          delete window[callbackName];
+
+          script.remove();
+
+          setStatus(
+            "API Response পাওয়া যায়নি। আবার চেষ্টা করুন।"
+          );
+
+          restartBtn.style.display = "block";
+
+        }
+
+      }, 15000);
+
+    }
+
+
+    // Scanner বন্ধ
+    async function stopScanner() {
+
+      if (scanner && scannerRunning) {
+
+        try {
+
+          await scanner.stop();
+
+          scannerRunning = false;
+
+        } catch (error) {
+
+          console.error("Scanner Stop Error:", error);
+
+          scannerRunning = false;
+
+        }
+
+      }
+
+    }
+
+
+    // Camera পরিবর্তন
+    async function switchCamera() {
+
+      if (cameras.length < 2 || processing) return;
+
+      switchCameraBtn.disabled = true;
+
+      await stopScanner();
+
+      currentCameraIndex =
+        (currentCameraIndex + 1) % cameras.length;
+
+      setStatus(
+        "Camera পরিবর্তন হচ্ছে..."
+      );
+
+      await startScanner();
+
+    }
+
+
+    // আবার Scan শুরু
+    async function restartScanner() {
 
       studentCard.style.display = "none";
 
+      restartBtn.style.display = "none";
+
+      processing = false;
+
       setStatus(
-        result && result.message
-          ? result.message
-          : "শিক্ষার্থীর তথ্য পাওয়া যায়নি।"
+        "নতুন QR Code Scan করার জন্য প্রস্তুত।"
       );
+
+      await startScanner();
 
     }
 
-    restartBtn.style.display = "block";
-  };
 
-  const script = document.createElement("script");
+    // Website Load হলে
+    window.addEventListener("load", function () {
 
-  script.id = "apiScript";
+      startScanner();
 
-  script.onerror = function (error) {
+    });
 
-    console.error("API SCRIPT ERROR:", error);
-    console.error("Requested API URL:", script.src);
+  </script>
 
-    if (responseReceived) return;
-
-    responseReceived = true;
-
-    delete window[callbackName];
-
-    script.remove();
-
-    setStatus(
-      "Backend API Script Load Failed. Console দেখুন।"
-    );
-
-    restartBtn.style.display = "block";
-  };
-
-  script.src =
-    API_URL +
-    "?action=lookup" +
-    "&token=" + encodeURIComponent(token) +
-    "&callback=" + callbackName +
-    "&_=" + Date.now();
-
-  document.body.appendChild(script);
-
-  // API Response না এলে
-  setTimeout(function () {
-
-    if (!responseReceived) {
-
-      responseReceived = true;
-
-      delete window[callbackName];
-
-      script.remove();
-
-      setStatus(
-        "API Response পাওয়া যায়নি। আবার চেষ্টা করুন।"
-      );
-
-      restartBtn.style.display = "block";
-    }
-
-  }, 15000);
-
-}
+</body>
+</html>
