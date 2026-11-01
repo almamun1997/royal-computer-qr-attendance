@@ -355,6 +355,23 @@ async function handleGoogleCredential(response) {
     }
 
     // Server verification succeeded.
+    // Save 30-day session in browser
+if (!result.sessionToken) {
+  throw new Error("Server থেকে Session Token পাওয়া যায়নি।");
+}
+
+teacherSessionToken = result.sessionToken;
+teacherEmail = result.email || "";
+
+localStorage.setItem(
+  "royal_teacher_session",
+  teacherSessionToken
+);
+
+localStorage.setItem(
+  "royal_teacher_email",
+  teacherEmail
+);
     loginPanel.style.display = "none";
     teacherInfo.style.display = "block";
     document.getElementById("teacherEmail").textContent =
@@ -399,6 +416,71 @@ async function verifyTeacherOnServer(idToken) {
   }
 
   return await response.json();
+}
+
+async function restoreTeacherSession() {
+  if (!teacherSessionToken) {
+    showDebug("No saved teacher session.");
+    return false;
+  }
+
+  setLoginStatus("আগের Login Session যাচাই হচ্ছে...");
+  showDebug("Checking saved teacher session.");
+
+  try {
+    const body = new URLSearchParams();
+    body.set("action", "validateSession");
+    body.set("sessionToken", teacherSessionToken);
+
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+      },
+      body: body.toString(),
+      redirect: "follow"
+    });
+
+    if (!response.ok) {
+      throw new Error("HTTP " + response.status);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.message || "Session invalid.");
+    }
+
+    teacherEmail = result.email || teacherEmail;
+
+    loginPanel.style.display = "none";
+    teacherInfo.style.display = "block";
+    document.getElementById("teacherEmail").textContent = teacherEmail;
+    scannerArea.style.display = "block";
+
+    setStatus("আগের Teacher Login Session সক্রিয় আছে।");
+    showDebug("Saved session restored successfully.");
+    showDebug("Teacher: " + teacherEmail);
+
+    return true;
+
+  } catch (error) {
+    showDebug("Session restore failed: " + error.message);
+
+    teacherSessionToken = null;
+    teacherEmail = "";
+
+    localStorage.removeItem("royal_teacher_session");
+    localStorage.removeItem("royal_teacher_email");
+
+    loginPanel.style.display = "block";
+    teacherInfo.style.display = "none";
+    scannerArea.style.display = "none";
+
+    setLoginStatus("Session আর সক্রিয় নেই। আবার Google Login করুন।");
+
+    return false;
+  }
 }
 
 async function logoutTeacher() {
@@ -544,10 +626,17 @@ async function restartScanner() {
   await startScanner();
 }
 
-window.addEventListener("load", function() {
+
+window.addEventListener("load", async function() {
   showDebug("Website loaded.");
-  initializeGoogleLogin();
+
+  const restored = await restoreTeacherSession();
+
+  if (!restored) {
+    initializeGoogleLogin();
+  }
 });
+
 </script>
 
 </body>
