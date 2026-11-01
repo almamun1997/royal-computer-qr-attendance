@@ -893,6 +893,49 @@ async function getAttendancePreviewFromServer(qrToken) {
 
   return await response.json();
 }
+
+  async function confirmAttendance() {
+  const button = document.getElementById("confirmAttendanceBtn");
+  const preview = document.getElementById("attendanceTypePreview");
+  const qrToken = window.currentAttendanceQrToken;
+
+  if (!qrToken || button.disabled) return;
+
+  button.disabled = true;
+  button.textContent = "Saving...";
+
+  try {
+    const result = await markAttendanceOnServer(qrToken);
+
+    if (!result || !result.success) {
+      throw new Error(
+        result && result.message
+          ? result.message
+          : "Attendance সংরক্ষণ করা যায়নি।"
+      );
+    }
+
+    preview.textContent =
+      result.attendanceType === "ENTRY"
+        ? "ENTRY (প্রবেশ) সফলভাবে সংরক্ষিত হয়েছে।"
+        : "EXIT (প্রস্থান) সফলভাবে সংরক্ষিত হয়েছে।";
+
+    setStatus(result.message || "Attendance সফলভাবে সংরক্ষিত হয়েছে।");
+    showDebug("Attendance saved: " + result.attendanceType);
+
+    window.currentAttendanceQrToken = "";
+
+    button.textContent = "Attendance Saved";
+    restartBtn.style.display = "block";
+
+  } catch (error) {
+    setStatus("Attendance সংরক্ষণ হয়নি: " + error.message);
+    showDebug("Attendance save failed: " + error.message);
+
+    button.disabled = false;
+    button.textContent = "Confirm Attendance";
+  }
+}
 // ======================================
 // QR SCAN CALLBACK
 // ======================================
@@ -909,6 +952,8 @@ async function onScanSuccess(decodedText) {
 
   // আগের Attendance তথ্য পরিষ্কার
   document.getElementById("confirmAttendanceBtn").disabled = true;
+  document.getElementById("confirmAttendanceBtn").textContent = "Confirm Attendance";
+window.currentAttendanceQrToken = "";
   document.getElementById("attendanceTypePreview").textContent =
     "Attendance Type যাচাই করা হচ্ছে...";
 
