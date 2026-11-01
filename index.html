@@ -261,8 +261,8 @@
 const API_URL =
   "https://script.google.com/macros/s/AKfycbyc7ivJIu27JPmVc0xYRIdBdvkRfQW_pOBA2tsTNLy4NCFtF266WnI9rBZADbNTEMnPQQ/exec";
 
-// আপনার Google OAuth Web Client ID বসান।
-const GOOGLE_CLIENT_ID = "389239494092-pcb9h5rh4k9ansjc37k6v7u9sn7psn8i.apps.googleusercontent.com";
+const GOOGLE_CLIENT_ID =
+  "389239494092-pcb9h5rh4k9ansjc37k6v7u9sn7psn8i.apps.googleusercontent.com";
 
 let scanner = null;
 let scannerRunning = false;
@@ -270,9 +270,12 @@ let processing = false;
 let cameras = [];
 let currentCameraIndex = 0;
 let teacherIdToken = null;
-let teacherSessionToken = localStorage.getItem("royal_teacher_session") || null;
-let teacherEmail = localStorage.getItem("royal_teacher_email") || "";
-  
+
+let teacherSessionToken =
+  localStorage.getItem("royal_teacher_session") || null;
+
+let teacherEmail =
+  localStorage.getItem("royal_teacher_email") || "";
 
 const loginPanel = document.getElementById("loginPanel");
 const loginStatus = document.getElementById("loginStatus");
@@ -297,7 +300,10 @@ function setLoginStatus(message) {
   loginStatus.textContent = message;
 }
 
-// Google Login initialize
+// ======================================
+// GOOGLE LOGIN INITIALIZATION
+// ======================================
+
 function initializeGoogleLogin() {
   if (GOOGLE_CLIENT_ID === "YOUR_GOOGLE_OAUTH_CLIENT_ID") {
     setLoginStatus("প্রথমে Google OAuth Client ID বসাতে হবে।");
@@ -332,7 +338,10 @@ function initializeGoogleLogin() {
   showDebug("Google Login initialized.");
 }
 
-// Google credential received
+// ======================================
+// GOOGLE LOGIN CALLBACK
+// ======================================
+
 async function handleGoogleCredential(response) {
   if (!response || !response.credential) {
     setLoginStatus("Google Login Token পাওয়া যায়নি।");
@@ -342,7 +351,7 @@ async function handleGoogleCredential(response) {
   teacherIdToken = response.credential;
 
   setLoginStatus("Teacher Access যাচাই হচ্ছে...");
-  showDebug("Google credential received. Sending verification request.");
+  showDebug("Google credential received.");
 
   try {
     const result = await verifyTeacherOnServer(teacherIdToken);
@@ -354,41 +363,38 @@ async function handleGoogleCredential(response) {
       return;
     }
 
-    // Server verification succeeded.
-    // Save 30-day session in browser
-if (!result.sessionToken) {
-  throw new Error("Server থেকে Session Token পাওয়া যায়নি।");
-}
+    if (!result.sessionToken) {
+      throw new Error("Server থেকে Session Token পাওয়া যায়নি।");
+    }
 
-teacherSessionToken = result.sessionToken;
-teacherEmail = result.email || "";
+    teacherSessionToken = result.sessionToken;
+    teacherEmail = result.email || "";
 
-localStorage.setItem(
-  "royal_teacher_session",
-  teacherSessionToken
-);
+    localStorage.setItem(
+      "royal_teacher_session",
+      teacherSessionToken
+    );
 
-localStorage.setItem(
-  "royal_teacher_email",
-  teacherEmail
-);
+    localStorage.setItem(
+      "royal_teacher_email",
+      teacherEmail
+    );
+
     loginPanel.style.display = "none";
     teacherInfo.style.display = "block";
+
     document.getElementById("teacherEmail").textContent =
-      result.email || "";
+      teacherEmail;
 
     scannerArea.style.display = "block";
 
     showDebug("Teacher access verified.");
-    showDebug("Teacher: " + (result.email || ""));
-    setStatus("Teacher Login সফল।");
+    showDebug("Teacher login successful.");
 
-    // QR lookup is deliberately not enabled yet.
     setStatus(
-      "Teacher Login সফল। Backend-এর authenticated QR Lookup এখনো প্রস্তুত নয়।"
+      "Teacher Login সফল। Authenticated QR Lookup এখনো সংযুক্ত করা হয়নি।"
     );
 
-    // Do not start the scanner until authenticated lookup is implemented.
   } catch (error) {
     teacherIdToken = null;
     setLoginStatus("Server Verification ব্যর্থ: " + error.message);
@@ -396,9 +402,13 @@ localStorage.setItem(
   }
 }
 
-// POST the ID token without placing it in the URL.
+// ======================================
+// SERVER GOOGLE TOKEN VERIFICATION
+// ======================================
+
 async function verifyTeacherOnServer(idToken) {
   const body = new URLSearchParams();
+
   body.set("action", "verifyTeacher");
   body.set("idToken", idToken);
 
@@ -418,6 +428,10 @@ async function verifyTeacherOnServer(idToken) {
   return await response.json();
 }
 
+// ======================================
+// RESTORE SAVED SESSION
+// ======================================
+
 async function restoreTeacherSession() {
   if (!teacherSessionToken) {
     showDebug("No saved teacher session.");
@@ -429,6 +443,7 @@ async function restoreTeacherSession() {
 
   try {
     const body = new URLSearchParams();
+
     body.set("action", "validateSession");
     body.set("sessionToken", teacherSessionToken);
 
@@ -455,10 +470,14 @@ async function restoreTeacherSession() {
 
     loginPanel.style.display = "none";
     teacherInfo.style.display = "block";
-    document.getElementById("teacherEmail").textContent = teacherEmail;
+
+    document.getElementById("teacherEmail").textContent =
+      teacherEmail;
+
     scannerArea.style.display = "block";
 
     setStatus("আগের Teacher Login Session সক্রিয় আছে।");
+
     showDebug("Saved session restored successfully.");
     showDebug("Teacher: " + teacherEmail);
 
@@ -477,17 +496,75 @@ async function restoreTeacherSession() {
     teacherInfo.style.display = "none";
     scannerArea.style.display = "none";
 
-    setLoginStatus("Session আর সক্রিয় নেই। আবার Google Login করুন।");
+    setLoginStatus("Session আর সক্রিয় নেই। আবার Login করুন।");
 
     return false;
   }
 }
 
+// ======================================
+// SECURE LOGOUT
+// ======================================
+
 async function logoutTeacher() {
+  const logoutButton = document.getElementById("logoutBtn");
+
+  if (logoutButton.disabled) return;
+
+  logoutButton.disabled = true;
+  logoutButton.textContent = "Logging out...";
+
+  const sessionToken = teacherSessionToken;
+  let serverRevoked = false;
+
+  try {
+    await stopScanner();
+
+    if (sessionToken) {
+      const body = new URLSearchParams();
+
+      body.set("action", "logout");
+      body.set("sessionToken", sessionToken);
+
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+        },
+        body: body.toString(),
+        redirect: "follow"
+      });
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const result = await response.json();
+
+      serverRevoked = result.success === true;
+
+      if (serverRevoked) {
+        showDebug("Backend session successfully revoked.");
+      } else {
+        showDebug("WARNING: Backend revocation was not confirmed.");
+      }
+    } else {
+      showDebug("No saved session token found.");
+    }
+
+  } catch (error) {
+    showDebug("WARNING: Server Logout failed: " + error.message);
+  }
+
+  // Clear local session regardless of server response.
   teacherIdToken = null;
+  teacherSessionToken = null;
+  teacherEmail = "";
 
-  await stopScanner();
+  localStorage.removeItem("royal_teacher_session");
+  localStorage.removeItem("royal_teacher_email");
 
+  // Reset interface.
   scannerArea.style.display = "none";
   teacherInfo.style.display = "none";
   loginPanel.style.display = "block";
@@ -495,13 +572,29 @@ async function logoutTeacher() {
   studentCard.style.display = "none";
   restartBtn.style.display = "none";
 
-  setLoginStatus("আপনি Logout করেছেন। আবার Login করুন।");
-  showDebug("Teacher logged out.");
+  processing = false;
+
+  logoutButton.disabled = false;
+  logoutButton.textContent = "Logout";
 
   if (window.google && google.accounts && google.accounts.id) {
     google.accounts.id.disableAutoSelect();
   }
+
+  if (serverRevoked) {
+    setLoginStatus("আপনি নিরাপদভাবে Logout করেছেন।");
+  } else {
+    setLoginStatus(
+      "Browser থেকে Logout হয়েছে, তবে Server Revocation নিশ্চিত হয়নি।"
+    );
+  }
+
+  showDebug("Teacher logged out.");
 }
+
+// ======================================
+// CAMERA MANAGEMENT
+// ======================================
 
 async function loadCameras() {
   showDebug("Loading available cameras...");
@@ -519,12 +612,17 @@ async function loadCameras() {
   currentCameraIndex = backIndex >= 0 ? backIndex : 0;
 
   showDebug("Camera found: " + cameras.length);
+
   switchCameraBtn.disabled = cameras.length < 2;
 }
 
+// ======================================
+// START SCANNER
+// ======================================
+
 async function startScanner() {
   try {
-    if (!teacherIdToken) {
+    if (!teacherSessionToken) {
       throw new Error("Teacher Login প্রয়োজন।");
     }
 
@@ -563,27 +661,41 @@ async function startScanner() {
 
   } catch (error) {
     console.error("Camera Error:", error);
+
     scannerRunning = false;
+
     setStatus("Camera Error: " + error.message);
     showDebug("CAMERA ERROR: " + error.message);
+
     switchCameraBtn.disabled = true;
   }
 }
 
+// ======================================
+// QR SCAN CALLBACK
+// ======================================
+
 async function onScanSuccess(decodedText) {
-  if (processing || !teacherIdToken) return;
+  if (processing || !teacherSessionToken) return;
 
   processing = true;
+
   setStatus("QR Code পাওয়া গেছে।");
   showDebug("QR detected.");
 
   await stopScanner();
 
-  // Authenticated lookup will be connected after backend verification.
+  // Authenticated QR Lookup will be connected in the next step.
   setStatus("QR Lookup এখনো Backend-এ সক্রিয় করা হয়নি।");
+
   showDebug("QR lookup is disabled pending authenticated backend.");
+
   restartBtn.style.display = "block";
 }
+
+// ======================================
+// STOP SCANNER
+// ======================================
 
 async function stopScanner() {
   if (scanner && scannerRunning) {
@@ -598,26 +710,43 @@ async function stopScanner() {
   }
 }
 
+// ======================================
+// SWITCH CAMERA
+// ======================================
+
 async function switchCamera() {
-  if (cameras.length < 2 || processing || !teacherIdToken) return;
+  if (
+    cameras.length < 2 ||
+    processing ||
+    !teacherSessionToken
+  ) {
+    return;
+  }
 
   switchCameraBtn.disabled = true;
+
   await stopScanner();
 
   currentCameraIndex =
     (currentCameraIndex + 1) % cameras.length;
 
   showDebug("Switching camera: " + (currentCameraIndex + 1));
+
   setStatus("Camera পরিবর্তন হচ্ছে...");
 
   await startScanner();
 }
 
+// ======================================
+// RESTART SCANNER
+// ======================================
+
 async function restartScanner() {
-  if (!teacherIdToken) return;
+  if (!teacherSessionToken) return;
 
   studentCard.style.display = "none";
   restartBtn.style.display = "none";
+
   processing = false;
 
   setStatus("নতুন QR Code Scan করার জন্য প্রস্তুত।");
@@ -626,6 +755,9 @@ async function restartScanner() {
   await startScanner();
 }
 
+// ======================================
+// PAGE LOAD
+// ======================================
 
 window.addEventListener("load", async function() {
   showDebug("Website loaded.");
