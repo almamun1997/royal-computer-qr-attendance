@@ -313,7 +313,7 @@
       ক্যামেরা চালু করে শিক্ষার্থীর QR Code Scan করুন।
     </div>
 
-    <div id="studentCard" class="student-card">
+        <div id="studentCard" class="student-card">
   <h3>Student Information</h3>
 
   <div class="student-profile">
@@ -342,6 +342,21 @@
   <div class="info">
     <strong>Mobile Number:</strong>
     <span id="studentPhone"></span>
+  </div>
+
+  <!-- ATTENDANCE CONFIRMATION -->
+  <div id="attendanceConfirmSection">
+    <div id="attendanceTypePreview">
+      Attendance Type যাচাই করা হচ্ছে...
+    </div>
+
+    <button
+      id="confirmAttendanceBtn"
+      type="button"
+      onclick="confirmAttendance()"
+      disabled>
+      Confirm Attendance
+    </button>
   </div>
 </div>
 
