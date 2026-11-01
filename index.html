@@ -844,6 +844,32 @@ async function lookupStudentOnServer(qrToken) {
 
   return await response.json();
 }
+  // ======================================
+// GET ATTENDANCE PREVIEW FROM SERVER
+// ======================================
+
+async function getAttendancePreviewFromServer(qrToken) {
+  const body = new URLSearchParams();
+
+  body.set("action", "attendancePreview");
+  body.set("sessionToken", teacherSessionToken);
+  body.set("qrToken", qrToken);
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+    },
+    body: body.toString(),
+    redirect: "follow"
+  });
+
+  if (!response.ok) {
+    throw new Error("Attendance Preview Error: " + response.status);
+  }
+
+  return await response.json();
+}
 // ======================================
 // QR SCAN CALLBACK
 // ======================================
