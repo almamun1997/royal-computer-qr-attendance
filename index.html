@@ -229,6 +229,19 @@
       statusBox.textContent = message;
     }
 
+    function showDebug(message) {
+
+  const panel = document.getElementById("debugPanel");
+  const log = document.getElementById("debugLog");
+
+  panel.style.display = "block";
+
+  const time = new Date().toLocaleTimeString();
+
+  log.textContent +=
+    "\n[" + time + "] " + message;
+}
+    
 
     // Camera List সংগ্রহ
     async function loadCameras() {
