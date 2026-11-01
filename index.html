@@ -884,8 +884,18 @@ async function onScanSuccess(decodedText) {
 
   await stopScanner();
 
+  // আগের Attendance তথ্য পরিষ্কার
+  document.getElementById("confirmAttendanceBtn").disabled = true;
+  document.getElementById("attendanceTypePreview").textContent =
+    "Attendance Type যাচাই করা হচ্ছে...";
+
+  restartBtn.style.display = "none";
+  studentCard.style.display = "none";
+
   try {
-    const result = await lookupStudentOnServer(decodedText.trim());
+    const qrToken = decodedText.trim();
+
+    const result = await lookupStudentOnServer(qrToken);
 
     if (!result || !result.success) {
       throw new Error(
@@ -908,30 +918,52 @@ async function onScanSuccess(decodedText) {
     document.getElementById("studentPhone").textContent =
       result.phone || "N/A";
 
-    // Display Student Photo
+    // Display student card immediately
     const photoElement = document.getElementById("studentPhoto");
 
-// প্রথমে ছবি ছাড়াই শিক্ষার্থীর তথ্য দেখাবে
-photoElement.removeAttribute("src");
-photoElement.style.display = "none";
+    photoElement.removeAttribute("src");
+    photoElement.style.display = "none";
 
-studentCard.style.display = "block";
+    studentCard.style.display = "block";
 
-// এরপর আলাদাভাবে ছবি লোড হবে
-loadStudentPhoto(decodedText.trim())
-  .then(photoResult => {
-    if (photoResult && photoResult.success && photoResult.photo) {
-      photoElement.src = photoResult.photo;
-      photoElement.style.display = "block";
+    // Load photo separately
+    loadStudentPhoto(qrToken)
+      .then(photoResult => {
+        if (photoResult && photoResult.success && photoResult.photo) {
+          photoElement.src = photoResult.photo;
+          photoElement.style.display = "block";
+        }
+      })
+      .catch(error => {
+        console.log("Photo loading failed:", error);
+      });
+
+    // Get ENTRY / EXIT preview
+    const preview = await getAttendancePreviewFromServer(qrToken);
+
+    if (!preview || !preview.success) {
+      throw new Error(
+        preview && preview.message
+          ? preview.message
+          : "Attendance Type নির্ধারণ করা যায়নি।"
+      );
     }
-  })
-  .catch(error => {
-    console.log("Photo loading failed:", error);
-  });
 
-    setStatus("শিক্ষার্থীর তথ্য সফলভাবে পাওয়া গেছে।");
+    // Save scanned QR token for confirmation
+    window.currentAttendanceQrToken = qrToken;
 
-    showDebug("Student information loaded successfully.");
+    const attendanceType = preview.attendanceType;
+
+    document.getElementById("attendanceTypePreview").textContent =
+      attendanceType === "ENTRY"
+        ? "পরবর্তী Attendance: ENTRY (প্রবেশ)"
+        : "পরবর্তী Attendance: EXIT (প্রস্থান)";
+
+    document.getElementById("confirmAttendanceBtn").disabled = false;
+
+    setStatus("শিক্ষার্থীর তথ্য পাওয়া গেছে। Confirm করুন।");
+
+    showDebug("Student information and Attendance Preview loaded.");
 
   } catch (error) {
     studentCard.style.display = "none";
@@ -940,8 +972,10 @@ loadStudentPhoto(decodedText.trim())
 
     showDebug("Student lookup failed: " + error.message);
 
-  } finally {
     restartBtn.style.display = "block";
+
+  } finally {
+    processing = false;
   }
 }
 // ======================================
