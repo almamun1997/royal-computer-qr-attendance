@@ -870,6 +870,29 @@ async function getAttendancePreviewFromServer(qrToken) {
 
   return await response.json();
 }
+
+  async function markAttendanceOnServer(qrToken) {
+  const body = new URLSearchParams();
+
+  body.set("action", "markAttendance");
+  body.set("sessionToken", teacherSessionToken);
+  body.set("qrToken", qrToken);
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+    },
+    body: body.toString(),
+    redirect: "follow"
+  });
+
+  if (!response.ok) {
+    throw new Error("Attendance Server Error: " + response.status);
+  }
+
+  return await response.json();
+}
 // ======================================
 // QR SCAN CALLBACK
 // ======================================
