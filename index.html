@@ -270,6 +270,9 @@ let processing = false;
 let cameras = [];
 let currentCameraIndex = 0;
 let teacherIdToken = null;
+let teacherSessionToken = localStorage.getItem("royal_teacher_session") || null;
+let teacherEmail = localStorage.getItem("royal_teacher_email") || "";
+  
 
 const loginPanel = document.getElementById("loginPanel");
 const loginStatus = document.getElementById("loginStatus");
