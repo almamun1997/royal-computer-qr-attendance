@@ -182,6 +182,57 @@
       color: #94a3b8;
       line-height: 1.6;
     }
+
+    .student-profile {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin: 15px 0;
+}
+
+.student-photo {
+  width: 110px;
+  height: 125px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  background: #f3f4f6;
+}
+
+.student-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.student-basic-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.student-basic-info .info {
+  display: block;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+
+.student-card .info {
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 380px) {
+  .student-photo {
+    width: 90px;
+    height: 110px;
+  }
+
+  .student-profile {
+    gap: 10px;
+  }
+}
   </style>
 </head>
 
@@ -219,8 +270,14 @@
     </div>
 
     <div id="studentCard" class="student-card">
-      <h3>Student Information</h3>
+  <h3>Student Information</h3>
 
+  <div class="student-profile">
+    <div class="student-photo">
+      <img id="studentPhoto" src="" alt="Student Photo">
+    </div>
+
+    <div class="student-basic-info">
       <div class="info">
         <strong>Form No:</strong>
         <span id="formNo"></span>
@@ -230,12 +287,19 @@
         <strong>Name:</strong>
         <span id="studentName"></span>
       </div>
-
-      <div class="info">
-        <strong>Course:</strong>
-        <span id="course"></span>
-      </div>
     </div>
+  </div>
+
+  <div class="info">
+    <strong>Course:</strong>
+    <span id="course"></span>
+  </div>
+
+  <div class="info">
+    <strong>Mobile Number:</strong>
+    <span id="studentPhone"></span>
+  </div>
+</div>
 
     <button id="restartBtn" onclick="restartScanner()">
       Scan Another Student
@@ -734,6 +798,20 @@ async function onScanSuccess(decodedText) {
     document.getElementById("course").textContent =
       result.course || "N/A";
 
+    document.getElementById("studentPhone").textContent =
+      result.phone || "N/A";
+
+    // Display Student Photo
+    const photoElement = document.getElementById("studentPhoto");
+
+    if (result.photo) {
+      photoElement.src = result.photo;
+      photoElement.style.display = "block";
+    } else {
+      photoElement.removeAttribute("src");
+      photoElement.style.display = "none";
+    }
+
     studentCard.style.display = "block";
 
     setStatus("শিক্ষার্থীর তথ্য সফলভাবে পাওয়া গেছে।");
@@ -751,7 +829,6 @@ async function onScanSuccess(decodedText) {
     restartBtn.style.display = "block";
   }
 }
-
 // ======================================
 // STOP SCANNER
 // ======================================
