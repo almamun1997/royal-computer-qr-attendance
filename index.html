@@ -673,6 +673,32 @@ async function startScanner() {
   }
 }
 
+  // ======================================
+// AUTHENTICATED STUDENT QR LOOKUP
+// ======================================
+
+async function lookupStudentOnServer(qrToken) {
+  const body = new URLSearchParams();
+
+  body.set("action", "lookupStudent");
+  body.set("sessionToken", teacherSessionToken);
+  body.set("qrToken", qrToken);
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+    },
+    body: body.toString(),
+    redirect: "follow"
+  });
+
+  if (!response.ok) {
+    throw new Error("Server HTTP Error: " + response.status);
+  }
+
+  return await response.json();
+}
 // ======================================
 // QR SCAN CALLBACK
 // ======================================
@@ -682,17 +708,48 @@ async function onScanSuccess(decodedText) {
 
   processing = true;
 
-  setStatus("QR Code পাওয়া গেছে।");
-  showDebug("QR detected.");
+  setStatus("QR Code পাওয়া গেছে। শিক্ষার্থীর তথ্য খোঁজা হচ্ছে...");
+  showDebug("QR detected. Looking up student...");
 
   await stopScanner();
 
-  // Authenticated QR Lookup will be connected in the next step.
-  setStatus("QR Lookup এখনো Backend-এ সক্রিয় করা হয়নি।");
+  try {
+    const result = await lookupStudentOnServer(decodedText.trim());
 
-  showDebug("QR lookup is disabled pending authenticated backend.");
+    if (!result || !result.success) {
+      throw new Error(
+        result && result.message
+          ? result.message
+          : "শিক্ষার্থীর তথ্য পাওয়া যায়নি।"
+      );
+    }
 
-  restartBtn.style.display = "block";
+    // Display student information
+    document.getElementById("formNo").textContent =
+      result.formNo || "N/A";
+
+    document.getElementById("studentName").textContent =
+      result.name || "N/A";
+
+    document.getElementById("course").textContent =
+      result.course || "N/A";
+
+    studentCard.style.display = "block";
+
+    setStatus("শিক্ষার্থীর তথ্য সফলভাবে পাওয়া গেছে।");
+
+    showDebug("Student information loaded successfully.");
+
+  } catch (error) {
+    studentCard.style.display = "none";
+
+    setStatus("তথ্য পাওয়া যায়নি: " + error.message);
+
+    showDebug("Student lookup failed: " + error.message);
+
+  } finally {
+    restartBtn.style.display = "block";
+  }
 }
 
 // ======================================
