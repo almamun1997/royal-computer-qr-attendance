@@ -47,6 +47,60 @@
       font-size: 14px;
     }
 
+    /* Royal Computer Header */
+
+.header {
+  text-align: left;
+  margin-bottom: 18px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.header-logo {
+  width: 85px;
+  height: 85px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.header-text {
+  text-align: left;
+}
+
+.header-text h2 {
+  margin: 0 0 3px;
+  color: #174ea6;
+  font-size: 21px;
+}
+
+.header-text h3 {
+  margin: 0 0 5px;
+  color: #334155;
+  font-size: 16px;
+}
+
+.header-text p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+@media (max-width: 380px) {
+  .header-logo {
+    width: 70px;
+    height: 70px;
+  }
+
+  .header-text h2 {
+    font-size: 18px;
+  }
+}
+
     #loginPanel {
       text-align: center;
       padding: 18px 8px;
