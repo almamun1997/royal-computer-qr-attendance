@@ -394,6 +394,7 @@ async function handleGoogleCredential(response) {
     setStatus(
       "Teacher Login সফল। Authenticated QR Lookup এখনো সংযুক্ত করা হয়নি।"
     );
+    await startScanner();
 
   } catch (error) {
     teacherIdToken = null;
@@ -480,7 +481,8 @@ async function restoreTeacherSession() {
 
     showDebug("Saved session restored successfully.");
     showDebug("Teacher: " + teacherEmail);
-
+    
+    await startScanner();
     return true;
 
   } catch (error) {
