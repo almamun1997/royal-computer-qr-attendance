@@ -4,10 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
   <title>Royal Computer - QR Attendance Scanner</title>
 
   <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -43,6 +43,46 @@
       margin: 0;
       color: #64748b;
       font-size: 14px;
+    }
+
+    #loginPanel {
+      text-align: center;
+      padding: 18px 8px;
+      border: 1px solid #dbeafe;
+      border-radius: 12px;
+      background: #f8fbff;
+    }
+
+    #loginPanel h3 {
+      color: #174ea6;
+      margin-top: 0;
+    }
+
+    #googleButton {
+      display: flex;
+      justify-content: center;
+      margin: 20px auto;
+      min-height: 42px;
+    }
+
+    #teacherInfo {
+      display: none;
+      padding: 12px;
+      margin-bottom: 15px;
+      background: #ecfdf5;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    #logoutBtn {
+      background: #64748b;
+      margin-top: 5px;
+    }
+
+    #scannerArea {
+      display: none;
     }
 
     #reader {
@@ -110,6 +150,7 @@
     }
 
     #switchCameraBtn { background: #475569; }
+
     #restartBtn {
       display: none;
       background: #15803d;
@@ -152,39 +193,55 @@
     <p>Training Center - QR Attendance Scanner</p>
   </div>
 
-  <div id="reader"></div>
-
-  <button id="switchCameraBtn" onclick="switchCamera()" disabled>
-    Front / Back Camera পরিবর্তন
-  </button>
-
-  <div id="status">
-    ক্যামেরা চালু করে শিক্ষার্থীর QR Code Scan করুন।
+  <div id="loginPanel">
+    <h3>Teacher Login</h3>
+    <p>অনুমোদিত Teacher Gmail দিয়ে Login করুন।</p>
+    <div id="googleButton"></div>
+    <div id="loginStatus">Google Login প্রস্তুত হচ্ছে...</div>
   </div>
 
-  
-  <div id="studentCard" class="student-card">
-    <h3>Student Information</h3>
-
-    <div class="info">
-      <strong>Form No:</strong>
-      <span id="formNo"></span>
-    </div>
-
-    <div class="info">
-      <strong>Name:</strong>
-      <span id="studentName"></span>
-    </div>
-
-    <div class="info">
-      <strong>Course:</strong>
-      <span id="course"></span>
-    </div>
+  <div id="teacherInfo">
+    <strong>Logged in as:</strong>
+    <span id="teacherEmail"></span>
+    <button id="logoutBtn" onclick="logoutTeacher()">Logout</button>
   </div>
 
-  <button id="restartBtn" onclick="restartScanner()">
-    Scan Another Student
-  </button>
+  <div id="scannerArea">
+
+    <div id="reader"></div>
+
+    <button id="switchCameraBtn" onclick="switchCamera()" disabled>
+      Front / Back Camera পরিবর্তন
+    </button>
+
+    <div id="status">
+      ক্যামেরা চালু করে শিক্ষার্থীর QR Code Scan করুন।
+    </div>
+
+    <div id="studentCard" class="student-card">
+      <h3>Student Information</h3>
+
+      <div class="info">
+        <strong>Form No:</strong>
+        <span id="formNo"></span>
+      </div>
+
+      <div class="info">
+        <strong>Name:</strong>
+        <span id="studentName"></span>
+      </div>
+
+      <div class="info">
+        <strong>Course:</strong>
+        <span id="course"></span>
+      </div>
+    </div>
+
+    <button id="restartBtn" onclick="restartScanner()">
+      Scan Another Student
+    </button>
+
+  </div>
 
   <div class="footer">
     Royal Computer Training Center<br>
@@ -193,45 +250,175 @@
 
   <div id="debugPanel">
     <strong>DEBUG INFORMATION</strong>
-    <pre id="debugLog">Scanner starting...</pre>
+    <pre id="debugLog">Website starting...</pre>
   </div>
-  
+
 </div>
 
 <script>
+"use strict";
 
 const API_URL =
   "https://script.google.com/macros/s/AKfycbyc7ivJIu27JPmVc0xYRIdBdvkRfQW_pOBA2tsTNLy4NCFtF266WnI9rBZADbNTEMnPQQ/exec";
+
+// আপনার Google OAuth Web Client ID বসান।
+const GOOGLE_CLIENT_ID = "389239494092-pcb9h5rh4k9ansjc37k6v7u9sn7psn8i.apps.googleusercontent.com";
 
 let scanner = null;
 let scannerRunning = false;
 let processing = false;
 let cameras = [];
 let currentCameraIndex = 0;
-let lookupTimeout = null;
+let teacherIdToken = null;
 
+const loginPanel = document.getElementById("loginPanel");
+const loginStatus = document.getElementById("loginStatus");
+const teacherInfo = document.getElementById("teacherInfo");
+const scannerArea = document.getElementById("scannerArea");
 const statusBox = document.getElementById("status");
 const studentCard = document.getElementById("studentCard");
 const restartBtn = document.getElementById("restartBtn");
 const switchCameraBtn = document.getElementById("switchCameraBtn");
 
-
 function setStatus(message) {
   statusBox.textContent = message;
 }
 
-
 function showDebug(message) {
   const log = document.getElementById("debugLog");
   const time = new Date().toLocaleTimeString();
-
-  log.textContent +=
-    "\n[" + time + "] " + message;
+  log.textContent += "\n[" + time + "] " + message;
 }
 
+function setLoginStatus(message) {
+  loginStatus.textContent = message;
+}
+
+// Google Login initialize
+function initializeGoogleLogin() {
+  if (GOOGLE_CLIENT_ID === "YOUR_GOOGLE_OAUTH_CLIENT_ID") {
+    setLoginStatus("প্রথমে Google OAuth Client ID বসাতে হবে।");
+    showDebug("Google OAuth Client ID is missing.");
+    return;
+  }
+
+  if (!window.google || !google.accounts || !google.accounts.id) {
+    setLoginStatus("Google Login Library Load হয়নি। Page Refresh করুন।");
+    showDebug("Google Identity Services unavailable.");
+    return;
+  }
+
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+    auto_select: false
+  });
+
+  google.accounts.id.renderButton(
+    document.getElementById("googleButton"),
+    {
+      theme: "outline",
+      size: "large",
+      shape: "rectangular",
+      text: "signin_with",
+      width: 260
+    }
+  );
+
+  setLoginStatus("অনুমোদিত Teacher Gmail দিয়ে Login করুন।");
+  showDebug("Google Login initialized.");
+}
+
+// Google credential received
+async function handleGoogleCredential(response) {
+  if (!response || !response.credential) {
+    setLoginStatus("Google Login Token পাওয়া যায়নি।");
+    return;
+  }
+
+  teacherIdToken = response.credential;
+
+  setLoginStatus("Teacher Access যাচাই হচ্ছে...");
+  showDebug("Google credential received. Sending verification request.");
+
+  try {
+    const result = await verifyTeacherOnServer(teacherIdToken);
+
+    if (!result.success) {
+      teacherIdToken = null;
+      setLoginStatus(result.message || "Teacher Access অনুমোদিত নয়।");
+      showDebug("Teacher verification rejected.");
+      return;
+    }
+
+    // Server verification succeeded.
+    loginPanel.style.display = "none";
+    teacherInfo.style.display = "block";
+    document.getElementById("teacherEmail").textContent =
+      result.email || "";
+
+    scannerArea.style.display = "block";
+
+    showDebug("Teacher access verified.");
+    showDebug("Teacher: " + (result.email || ""));
+    setStatus("Teacher Login সফল।");
+
+    // QR lookup is deliberately not enabled yet.
+    setStatus(
+      "Teacher Login সফল। Backend-এর authenticated QR Lookup এখনো প্রস্তুত নয়।"
+    );
+
+    // Do not start the scanner until authenticated lookup is implemented.
+  } catch (error) {
+    teacherIdToken = null;
+    setLoginStatus("Server Verification ব্যর্থ: " + error.message);
+    showDebug("Teacher verification error: " + error.message);
+  }
+}
+
+// POST the ID token without placing it in the URL.
+async function verifyTeacherOnServer(idToken) {
+  const body = new URLSearchParams();
+  body.set("action", "verifyTeacher");
+  body.set("idToken", idToken);
+
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+    },
+    body: body.toString(),
+    redirect: "follow"
+  });
+
+  if (!response.ok) {
+    throw new Error("HTTP " + response.status);
+  }
+
+  return await response.json();
+}
+
+async function logoutTeacher() {
+  teacherIdToken = null;
+
+  await stopScanner();
+
+  scannerArea.style.display = "none";
+  teacherInfo.style.display = "none";
+  loginPanel.style.display = "block";
+
+  studentCard.style.display = "none";
+  restartBtn.style.display = "none";
+
+  setLoginStatus("আপনি Logout করেছেন। আবার Login করুন।");
+  showDebug("Teacher logged out.");
+
+  if (window.google && google.accounts && google.accounts.id) {
+    google.accounts.id.disableAutoSelect();
+  }
+}
 
 async function loadCameras() {
-
   showDebug("Loading available cameras...");
 
   cameras = await Html5Qrcode.getCameras();
@@ -247,14 +434,14 @@ async function loadCameras() {
   currentCameraIndex = backIndex >= 0 ? backIndex : 0;
 
   showDebug("Camera found: " + cameras.length);
-
   switchCameraBtn.disabled = cameras.length < 2;
 }
 
-
 async function startScanner() {
-
   try {
+    if (!teacherIdToken) {
+      throw new Error("Teacher Login প্রয়োজন।");
+    }
 
     if (scannerRunning) return;
 
@@ -284,176 +471,37 @@ async function startScanner() {
     );
 
     scannerRunning = true;
-
     switchCameraBtn.disabled = cameras.length < 2;
 
     setStatus("QR Code Scan করার জন্য প্রস্তুত।");
     showDebug("Camera started successfully.");
 
   } catch (error) {
-
     console.error("Camera Error:", error);
-
     scannerRunning = false;
-
     setStatus("Camera Error: " + error.message);
     showDebug("CAMERA ERROR: " + error.message);
-
     switchCameraBtn.disabled = true;
   }
 }
 
-
 async function onScanSuccess(decodedText) {
-
-  if (processing) return;
+  if (processing || !teacherIdToken) return;
 
   processing = true;
-
-  setStatus("QR Code পাওয়া গেছে। শিক্ষার্থীর তথ্য যাচাই হচ্ছে...");
-
-  showDebug("QR detected. Starting student lookup.");
+  setStatus("QR Code পাওয়া গেছে।");
+  showDebug("QR detected.");
 
   await stopScanner();
 
-  lookupStudent(decodedText);
+  // Authenticated lookup will be connected after backend verification.
+  setStatus("QR Lookup এখনো Backend-এ সক্রিয় করা হয়নি।");
+  showDebug("QR lookup is disabled pending authenticated backend.");
+  restartBtn.style.display = "block";
 }
-
-
-function lookupStudent(token) {
-
-  const callbackName =
-    "handleStudentLookup_" + Date.now();
-
-  let responseReceived = false;
-
-  showDebug("Sending Student Lookup Request...");
-
-  const script = document.createElement("script");
-  script.id = "apiScript";
-
-  function cleanup() {
-
-    delete window[callbackName];
-
-    if (script.parentNode) {
-      script.remove();
-    }
-
-    if (lookupTimeout) {
-      clearTimeout(lookupTimeout);
-      lookupTimeout = null;
-    }
-  }
-
-
-  window[callbackName] = function(result) {
-
-    if (responseReceived) return;
-
-    responseReceived = true;
-
-    cleanup();
-
-    showDebug("API response received.");
-
-    if (result && result.success) {
-
-      document.getElementById("formNo").textContent =
-        result.formNo;
-
-      document.getElementById("studentName").textContent =
-        result.name;
-
-      document.getElementById("course").textContent =
-        result.course;
-
-      studentCard.style.display = "block";
-
-      setStatus("সফল! শিক্ষার্থীর তথ্য পাওয়া গেছে.");
-
-      showDebug("Student lookup successful.");
-      showDebug("Form No: " + result.formNo);
-      showDebug("Course: " + result.course);
-
-    } else {
-
-      studentCard.style.display = "none";
-
-      const message =
-        result && result.message
-          ? result.message
-          : "শিক্ষার্থীর তথ্য পাওয়া যায়নি।";
-
-      setStatus(message);
-      showDebug("API returned error: " + message);
-    }
-
-    restartBtn.style.display = "block";
-  };
-
-
-  script.onerror = function(error) {
-
-    if (responseReceived) return;
-
-    responseReceived = true;
-
-    cleanup();
-
-    console.error("API SCRIPT ERROR:", error);
-
-    setStatus("Backend API Script Load Failed.");
-
-    showDebug("API SCRIPT LOAD ERROR.");
-    showDebug("Browser could not load the API response script.");
-    showDebug("Check API deployment, redirect and network access.");
-
-    restartBtn.style.display = "block";
-  };
-
-
-  const requestUrl =
-    API_URL +
-    "?action=lookup" +
-    "&token=" + encodeURIComponent(token) +
-    "&callback=" + callbackName +
-    "&_=" + Date.now();
-
-  // Token গোপন রেখে শুধু Request-এর সাধারণ তথ্য দেখানো হচ্ছে
-  showDebug("Request URL: Apps Script API");
-  showDebug("Action: lookup");
-  showDebug("JSONP callback: " + callbackName);
-
-  script.src = requestUrl;
-
-  document.body.appendChild(script);
-
-
-  lookupTimeout = setTimeout(function() {
-
-    if (!responseReceived) {
-
-      responseReceived = true;
-
-      cleanup();
-
-      setStatus("API Response পাওয়া যায়নি। আবার চেষ্টা করুন।");
-
-      showDebug("API TIMEOUT: No response within 15 seconds.");
-
-      restartBtn.style.display = "block";
-    }
-
-  }, 15000);
-
-}
-
 
 async function stopScanner() {
-
   if (scanner && scannerRunning) {
-
     try {
       await scanner.stop();
     } catch (error) {
@@ -465,51 +513,38 @@ async function stopScanner() {
   }
 }
 
-
 async function switchCamera() {
-
-  if (cameras.length < 2 || processing) return;
+  if (cameras.length < 2 || processing || !teacherIdToken) return;
 
   switchCameraBtn.disabled = true;
-
   await stopScanner();
 
   currentCameraIndex =
     (currentCameraIndex + 1) % cameras.length;
 
-  showDebug(
-    "Switching camera: " +
-    (currentCameraIndex + 1)
-  );
-
+  showDebug("Switching camera: " + (currentCameraIndex + 1));
   setStatus("Camera পরিবর্তন হচ্ছে...");
 
   await startScanner();
 }
 
-
 async function restartScanner() {
+  if (!teacherIdToken) return;
 
   studentCard.style.display = "none";
   restartBtn.style.display = "none";
-
   processing = false;
 
-  setStatus("নতুন QR Code Scan করার জন্য প্রস্তুত.");
-
+  setStatus("নতুন QR Code Scan করার জন্য প্রস্তুত।");
   showDebug("Scanner restarted.");
 
   await startScanner();
 }
 
-
 window.addEventListener("load", function() {
-
   showDebug("Website loaded.");
-  startScanner();
-
+  initializeGoogleLogin();
 });
-
 </script>
 
 </body>
