@@ -808,16 +808,19 @@ async function loadCameras() {
   cameras = await Html5Qrcode.getCameras();
 
   if (!cameras || cameras.length === 0) {
-    throw new Error("কোনো Camera পাওয়া যায়নি।");
+    throw new Error("কোনো Camera পাওয়া যায়নি। Browser কোনো Camera Device শনাক্ত করতে পারেনি।");
   }
 
   const backIndex = cameras.findIndex(camera =>
-    /back|rear|environment/i.test(camera.label)
+    /back|rear|environment/i.test(camera.label || "")
   );
 
   currentCameraIndex = backIndex >= 0 ? backIndex : 0;
 
   showDebug("Camera found: " + cameras.length);
+  cameras.forEach((camera, index) => {
+    showDebug("Camera " + (index + 1) + ": " + (camera.label || "Unnamed device"));
+  });
 
   switchCameraBtn.disabled = cameras.length < 2;
 }
@@ -827,21 +830,25 @@ async function loadCameras() {
 // ======================================
 
 async function startScanner() {
+  if (!teacherSessionToken) {
+    setStatus("Teacher Login প্রয়োজন।");
+    return;
+  }
+
+  if (scannerRunning) return;
+
+  if (!window.Html5Qrcode) {
+    setStatus("QR Scanner Library Load হয়নি। Page Refresh করুন।");
+    showDebug("CAMERA ERROR: Html5Qrcode library unavailable.");
+    return;
+  }
+
   try {
-    if (!teacherSessionToken) {
-      throw new Error("Teacher Login প্রয়োজন।");
-    }
-
-    if (scannerRunning) return;
-
-    if (!window.Html5Qrcode) {
-      throw new Error("QR Scanner Library Load হয়নি।");
-    }
-
     if (!cameras.length) {
       await loadCameras();
     }
 
+    // Recreate the scanner instance after a previous failed start.
     if (!scanner) {
       scanner = new Html5Qrcode("reader");
     }
@@ -849,15 +856,77 @@ async function startScanner() {
     setStatus("ক্যামেরা চালু হচ্ছে...");
     showDebug("Starting camera...");
 
-    await scanner.start(
-      cameras[currentCameraIndex].id,
-      {
-        fps: 10,
-        qrbox: { width: 230, height: 230 }
-      },
-      onScanSuccess,
-      function () {}
-    );
+    const selectedCamera = cameras[currentCameraIndex];
+    let firstError = null;
+
+    // First attempt: use the selected camera's exact device ID.
+    try {
+      showDebug("Trying selected camera: " +
+        (selectedCamera.label || selectedCamera.id));
+
+      await scanner.start(
+        selectedCamera.id,
+        {
+          fps: 10,
+          qrbox: { width: 230, height: 230 }
+        },
+        onScanSuccess,
+        function () {}
+      );
+
+      showDebug("Selected camera started successfully.");
+
+    } catch (error) {
+      firstError = error;
+      showDebug("Selected camera failed: " +
+        (error && error.message ? error.message : String(error)));
+
+      // Reset the Html5Qrcode instance before trying the fallback.
+      try {
+        if (scanner && typeof scanner.clear === "function") {
+          await scanner.clear();
+        }
+      } catch (clearError) {
+        showDebug("Scanner reset notice: " +
+          (clearError && clearError.message
+            ? clearError.message
+            : String(clearError)));
+      }
+
+      scanner = new Html5Qrcode("reader");
+
+      // Second attempt: let the browser choose the environment camera.
+      showDebug("Trying fallback camera mode: environment");
+
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 230, height: 230 }
+          },
+          onScanSuccess,
+          function () {}
+        );
+
+        showDebug("Fallback environment camera started successfully.");
+
+      } catch (fallbackError) {
+        const firstMessage = firstError && firstError.message
+          ? firstError.message
+          : String(firstError);
+        const fallbackMessage = fallbackError && fallbackError.message
+          ? fallbackError.message
+          : String(fallbackError);
+
+        throw new Error(
+          "Camera চালু করা যায়নি। Device ID পদ্ধতি: " +
+          firstMessage +
+          " | Environment পদ্ধতি: " +
+          fallbackMessage
+        );
+      }
+    }
 
     scannerRunning = true;
     switchCameraBtn.disabled = cameras.length < 2;
@@ -870,8 +939,12 @@ async function startScanner() {
 
     scannerRunning = false;
 
-    setStatus("Camera Error: " + error.message);
-    showDebug("CAMERA ERROR: " + error.message);
+    const errorMessage = error && error.message
+      ? error.message
+      : String(error);
+
+    setStatus("Camera Error: " + errorMessage);
+    showDebug("CAMERA ERROR: " + errorMessage);
 
     switchCameraBtn.disabled = true;
   }
